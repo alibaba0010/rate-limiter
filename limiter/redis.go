@@ -21,13 +21,14 @@ func NewRedisTokenBucket(client *redis.Client) *RedisTokenBucket {
 
 // Lua script for token bucket
 // Keys: [1] bucket_key
-// Args: [1] rate (tokens/sec), [2] capacity, [3] now (unixtime float), [4] requested (tokens)
+// Args: [1] rate (tokens/sec), [2] capacity, [3] now (unixtime float), [4] requested (tokens), [5] ttl (ms)
 var tokenBucketScript = redis.NewScript(`
 local key = KEYS[1]
 local rate = tonumber(ARGS[1])
 local capacity = tonumber(ARGS[2])
 local now = tonumber(ARGS[3])
 local requested = tonumber(ARGS[4])
+local ttl = tonumber(ARGS[5])
 
 local last_tokens = tonumber(redis.call("HGET", key, "tokens"))
 local last_updated = tonumber(redis.call("HGET", key, "last_updated"))
@@ -48,7 +49,7 @@ if filled_tokens >= requested then
     allowed = 1
     remaining = filled_tokens - requested
     redis.call("HSET", key, "tokens", remaining, "last_updated", now)
-    redis.call("PEXPIRE", key, 60000) -- Expire idle keys (1 min)
+    redis.call("PEXPIRE", key, ttl) 
 else
     allowed = 0
     remaining = filled_tokens
@@ -66,7 +67,17 @@ func (r *RedisTokenBucket) Allow(ctx context.Context, key string, limit Limit) (
 	now := float64(time.Now().UnixMicro()) / 1e6
 
 	keys := []string{key}
-	args := []interface{}{ratePerSec, limit.Burst, now, 1}
+	
+	// Calculate a safe TTL for the key
+	// We must keep the key at least as long as it takes to refill the bucket.
+	// If it expires early, it resets to "Full", which would allow cheating the limit.
+	fillTimeSeconds := float64(limit.Burst) / ratePerSec
+	ttlMs := int(fillTimeSeconds * 1000 * 1.5) // 50% safety margin directly in ms
+	if ttlMs < 1000 {
+		ttlMs = 1000 // Minimum 1s
+	}
+
+	args := []interface{}{ratePerSec, limit.Burst, now, 1, ttlMs}
 
 	// Helper to cast interface{} to float64 safely
 	toFloat := func(v interface{}) float64 {

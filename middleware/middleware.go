@@ -10,16 +10,16 @@ import (
 
 // Config defines the configuration for the rate limiter middleware
 type Config struct {
-	Limiter          limiter.Strategy
+	Limiter limiter.Strategy
 	// KeyFunc computes the rate limit key from the request.
 	// Common examples: IP address, User ID (from context), API Key.
-	KeyFunc          func(r *http.Request) string
+	KeyFunc func(r *http.Request) string
 	// LimitFunc returns the limit configuration for the request.
 	// This allows dynamic limits per user/endpoint.
-	LimitFunc        func(r *http.Request) limiter.Limit
+	LimitFunc func(r *http.Request) limiter.Limit
 	// ErrorHandler handles internal errors from the limiter (e.g. Redis down).
 	// Default: Log and continue (Fail Open) or returns 500? Often Fail Open is safer.
-	ErrorHandler     func(w http.ResponseWriter, r *http.Request, err error)
+	ErrorHandler func(w http.ResponseWriter, r *http.Request, err error)
 	// RateLimitHandler handles requests allowed/denied logic customization.
 	// If nil, default 429 response is used when denied.
 	RateLimitHandler func(w http.ResponseWriter, r *http.Request, res *limiter.Result)
@@ -62,13 +62,13 @@ func New(cfg Config) func(http.Handler) http.Handler {
 
 			// Set generic headers if desired (X-RateLimit-Limit, etc)
 			// (Optional: standard headers)
-			
+
 			if !res.Allowed {
 				if cfg.RateLimitHandler != nil {
 					cfg.RateLimitHandler(w, r, res)
 					return
 				}
-				
+
 				w.Header().Set("Retry-After", strconv.Itoa(int(res.ResetAfter.Seconds())))
 				http.Error(w, "Too Many Requests", http.StatusTooManyRequests)
 				return

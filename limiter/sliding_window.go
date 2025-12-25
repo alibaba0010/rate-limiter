@@ -47,7 +47,7 @@ func (sw *SlidingWindow) Allow(ctx context.Context, key string, limit Limit) (*R
 	elapsed := now.Sub(w.currWindowStart)
 	if elapsed >= limit.Period {
 		windowsPassed := int(elapsed / limit.Period)
-		
+
 		// If 1 window passed, the current becomes previous
 		if windowsPassed == 1 {
 			w.prevCount = w.currCount
@@ -65,10 +65,10 @@ func (sw *SlidingWindow) Allow(ctx context.Context, key string, limit Limit) (*R
 	// Requests in previous window * (Time remaining in current window / Window size) + Requests in current window
 	timeInCurrent := now.Sub(w.currWindowStart).Seconds()
 	windowSize := limit.Period.Seconds()
-	
+
 	// Weight of the previous window
 	weight := math.Max(0, (windowSize-timeInCurrent)/windowSize)
-	
+
 	estimatedCount := float64(w.prevCount)*weight + float64(w.currCount)
 
 	result := &Result{}
@@ -79,7 +79,7 @@ func (sw *SlidingWindow) Allow(ctx context.Context, key string, limit Limit) (*R
 		if result.Remaining < 0 {
 			result.Remaining = 0
 		}
-		result.ResetAfter = 0 
+		result.ResetAfter = 0
 	} else {
 		result.Allowed = false
 		result.Remaining = 0
